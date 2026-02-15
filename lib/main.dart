@@ -1,15 +1,21 @@
+import 'package:educore_cleanarch/features/student/data/datasources/student_local_data_source.dart';
+import 'package:educore_cleanarch/features/student/presentation/pages/student_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'features/student/data/models/student_model.dart';
+import 'features/student/presentation/cubit/student_cubit.dart';
+import 'injection_container.dart' as di; // استيراد ملف الحقن
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Hive.initFlutter();
-
   Hive.registerAdapter(StudentModelAdapter());
 
-  await Hive.openBox<StudentModel>('student_box');
+  await Hive.openBox<StudentModel>(kStudentBoxString);
+
+  await di.init();
 
   runApp(const MyApp());
 }
@@ -19,9 +25,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(body: Center(child: Text("Database Ready!"))),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => di.sl<StudentCubit>()..getStudents()),
+      ],
+      child: const MaterialApp(title: 'EduCore Sync', home: StudentsPage()),
     );
   }
 }
