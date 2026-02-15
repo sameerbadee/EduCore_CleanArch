@@ -1,3 +1,12 @@
+import 'package:dartz/dartz.dart';
+import 'package:educore_cleanarch/core/errors/failures.dart';
+import 'package:educore_cleanarch/core/network/network_info.dart';
+import 'package:educore_cleanarch/features/student/data/datasources/student_local_data_source.dart';
+import 'package:educore_cleanarch/features/student/data/datasources/student_remote_datasource.dart';
+import 'package:educore_cleanarch/features/student/data/models/student_model.dart';
+import 'package:educore_cleanarch/features/student/domain/entities/student_entity.dart';
+import 'package:educore_cleanarch/features/student/domain/repositories/student_repository.dart';
+
 class StudentRepositoryImpl implements StudentRepository {
   final StudentRemoteDataSource remoteDataSource;
   final StudentLocalDataSource localDataSource;
@@ -11,13 +20,10 @@ class StudentRepositoryImpl implements StudentRepository {
 
   @override
   Future<Either<Failure, List<StudentEntity>>> getStudents() async {
-    // 1. فحص الاتصال بالإنترنت
     if (await networkInfo.isConnected) {
       try {
-        // A. يوجد إنترنت: نجلب البيانات من السيرفر
         final remoteStudents = await remoteDataSource.getAllStudents();
 
-        // B. الخطوة الذكية: نحفظ نسخة منها في Hive (Caching) للعمل أوفلاين لاحقاً
         await localDataSource.cacheStudents(remoteStudents);
 
         return Right(remoteStudents);
@@ -26,7 +32,6 @@ class StudentRepositoryImpl implements StudentRepository {
       }
     } else {
       try {
-        // C. لا يوجد إنترنت: نجلب البيانات من Hive مباشرة
         final localStudents = await localDataSource.getCachedStudents();
         return Right(localStudents);
       } catch (e) {
@@ -37,16 +42,12 @@ class StudentRepositoryImpl implements StudentRepository {
 
   @override
   Future<Either<Failure, Unit>> addStudent(StudentEntity student) async {
-    // تحويل الـ Entity إلى Model لنتعامل مع البيانات
     final studentModel = StudentModel.fromEntity(student);
 
     if (await networkInfo.isConnected) {
       try {
-        // A. أونلاين: نرسل للسيرفر + نحفظ محلياً كـ Synced
         await remoteDataSource.addStudent(studentModel);
 
-        // هنا نحفظها في Hive ونقول أنها (isSynced = true)
-        // ملاحظة: يمكنك تعديل الموديل ليقبل copyWith لتغيير الحالة، أو حفظها كما هي إذا كان السيرفر يعيد القيمة
         await localDataSource.addStudent(studentModel);
 
         return const Right(unit);
@@ -55,11 +56,8 @@ class StudentRepositoryImpl implements StudentRepository {
       }
     } else {
       try {
-        // B. أوفلاين: نحفظ في Hive فقط (لكن يجب أن تكون isSynced = false)
-        // بما أننا لم نرسلها للسيرفر، فهي غير متزامنة
         await localDataSource.addStudent(studentModel);
 
-        // هنا مستقبلاً يمكن عمل Background Service ترفع البيانات غير المتزامنة
         return const Right(unit);
       } catch (e) {
         return Left(CacheFailure(e.toString()));
